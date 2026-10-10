@@ -6,6 +6,7 @@ export type OssConfig = {
   accessKeyId: string;
   accessKeySecret: string;
   prefix: string;
+  maxFileSizeMb: number;
 };
 
 export type BucketInfo = {
@@ -13,7 +14,14 @@ export type BucketInfo = {
   region: string | null;
 };
 
+const DEFAULT_MAX_FILE_SIZE_MB = 4;
+
 let cachedConfig: OssConfig | null = null;
+
+function parseMaxFileSizeMb(value: string | undefined): number {
+  const parsed = Number((value || '').trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_FILE_SIZE_MB;
+}
 
 export function getOssConfig(): OssConfig {
   if (!cachedConfig) {
@@ -22,6 +30,7 @@ export function getOssConfig(): OssConfig {
       accessKeyId: (process.env.OSS_ACCESS_KEY_ID || '').trim(),
       accessKeySecret: (process.env.OSS_ACCESS_KEY_SECRET || '').trim(),
       prefix: (process.env.OSS_PREFIX || '').trim(),
+      maxFileSizeMb: parseMaxFileSizeMb(process.env.OSS_MAX_FILE_SIZE_MB),
     };
   }
   return cachedConfig;
@@ -33,6 +42,10 @@ export function assertOssConfig(): OssConfig {
     throw new Error('缺少 OSS 配置，请参考 .env.example 检查 .env');
   }
   return cfg;
+}
+
+export function maxUploadBytes(): number {
+  return Math.round(getOssConfig().maxFileSizeMb * 1024 * 1024);
 }
 
 function normalizeEndpoint(endpoint: string): string {

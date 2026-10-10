@@ -1,5 +1,5 @@
 import Busboy from 'busboy';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
@@ -8,6 +8,7 @@ import {
   buildObjectKey,
   buildObjectUrl,
   getUploadClient,
+  maxUploadBytes,
   regionFromEndpoint,
 } from '@/lib/oss';
 
@@ -52,6 +53,10 @@ export async function POST(request: Request) {
   let uploadError: Error | null = null;
   let badRequest: string | null = null;
   let uploadPromise: Promise<void> | null = null;
+  let sizeExceeded = false;
+
+  const maxBytes = maxUploadBytes();
+  const limitMessage = `文件大小超过限制（最大 ${cfg.maxFileSizeMb} MB）`;
 
   const parsed = new Promise<void>((resolve, reject) => {
     busboy.on('field', (name, value) => {
@@ -59,7 +64,7 @@ export async function POST(request: Request) {
     });
 
     busboy.on('file', (_name, stream, info) => {
-      if (uploadPromise) {
+      if (uploadPromise || sizeExceeded) {
         stream.resume();
         return;
       }
@@ -75,11 +80,34 @@ export async function POST(request: Request) {
       const prefix = fields.prefix === undefined ? cfg.prefix : fields.prefix;
       const region = fields.region || regionFromEndpoint(cfg.endpoint);
       const size = Number(fields.size || 0);
-      const objectKey = buildObjectKey(prefix, ext);
+      if (size > maxBytes) {
+        sizeExceeded = true;
+        stream.resume();
+        return;
+      }
 
+      const objectKey = buildObjectKey(prefix, ext);
       const client = getUploadClient(bucket, region);
+
+      // 客户端可能不传 size 或谎报，流式计数兜底，超限即中断上传
+      let receivedBytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          receivedBytes += chunk.length;
+          if (receivedBytes > maxBytes) {
+            sizeExceeded = true;
+            callback(new Error(limitMessage));
+            return;
+          }
+          callback(null, chunk);
+        },
+      });
+      limiter.on('error', () => {
+        stream.resume();
+      });
+
       uploadPromise = client
-        .put(objectKey, stream, {
+        .put(objectKey, stream.pipe(limiter), {
           mime: info.mimeType,
           ...(size > 0 ? { contentLength: size } : {}),
         })
@@ -94,6 +122,9 @@ export async function POST(request: Request) {
         })
         .catch((error: Error) => {
           uploadError = error;
+          // 上传失败后无人消费文件流，主动排空，避免 busboy 卡住不触发 close
+          stream.unpipe(limiter);
+          stream.resume();
         });
     });
 
@@ -119,6 +150,10 @@ export async function POST(request: Request) {
 
   if (badRequest) {
     return NextResponse.json({ error: badRequest }, { status: 400 });
+  }
+
+  if (sizeExceeded) {
+    return NextResponse.json({ error: limitMessage }, { status: 413 });
   }
 
   const failed = uploadError as Error | null;

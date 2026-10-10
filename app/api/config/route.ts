@@ -10,6 +10,7 @@ export async function GET() {
   return NextResponse.json({
     endpoint: cfg.endpoint,
     defaultPrefix: cfg.prefix,
+    maxFileSizeMb: cfg.maxFileSizeMb,
     buckets,
     warning: error ? `获取桶列表失败（${error}）` : null,
   });

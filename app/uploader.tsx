@@ -55,6 +55,7 @@ export default function Uploader() {
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [maxFileSizeMb, setMaxFileSizeMb] = useState<number | null>(null);
 
   const tasksRef = useRef<Task[]>([]);
   const busyRef = useRef(false);
@@ -114,6 +115,9 @@ export default function Uploader() {
         const cfg = await res.json();
         if (cancelled) return;
         setPrefix(cfg.defaultPrefix || '');
+        if (typeof cfg.maxFileSizeMb === 'number' && cfg.maxFileSizeMb > 0) {
+          setMaxFileSizeMb(cfg.maxFileSizeMb);
+        }
         const list: BucketInfo[] = [...(cfg.buckets || [])];
         setBuckets(list);
         setReady(true);
@@ -321,7 +325,14 @@ export default function Uploader() {
       showToast('请先选择目标桶', true);
       return;
     }
-    for (const file of files) {
+    const limitBytes = maxFileSizeMb ? maxFileSizeMb * 1024 * 1024 : 0;
+    const accepted = limitBytes ? files.filter((file) => file.size <= limitBytes) : files;
+    const skipped = files.length - accepted.length;
+    if (!accepted.length) {
+      showToast(`已跳过 ${skipped} 个超过 ${maxFileSizeMb} MB 的文件`, true);
+      return;
+    }
+    for (const file of accepted) {
       tasksRef.current.push({
         id: (seqRef.current += 1),
         file,
@@ -336,7 +347,12 @@ export default function Uploader() {
       });
     }
     syncTasks();
-    showToast(`已加入 ${files.length} 个文件`);
+    showToast(
+      skipped
+        ? `已加入 ${accepted.length} 个文件，跳过 ${skipped} 个超过 ${maxFileSizeMb} MB 的文件`
+        : `已加入 ${accepted.length} 个文件`,
+      skipped > 0,
+    );
     pump();
   };
 
@@ -509,7 +525,9 @@ export default function Uploader() {
                 </svg>
               </span>
               <p className="drop-title">拖拽文件到此处</p>
-              <p className="drop-sub">或点击选择文件 · 支持多选 · 串行上传</p>
+              <p className="drop-sub">
+                或点击选择文件 · 支持多选 · 串行上传{maxFileSizeMb ? ` · 单个文件 ≤ ${maxFileSizeMb} MB` : ''}
+              </p>
             </div>
           </div>
           <input

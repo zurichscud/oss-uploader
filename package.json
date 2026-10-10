@@ -1,0 +1,27 @@
+{
+  "name": "oss-uploader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "阿里云 OSS 可视化上传工具，键名规则与 commune-mp 保持一致",
+  "scripts": {
+    "dev": "next dev -p 3211",
+    "build": "next build",
+    "start": "next start -p 3211"
+  },
+  "dependencies": {
+    "ali-oss": "^6.23.0",
+    "busboy": "^1.6.0",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/ali-oss": "^6.23.3",
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

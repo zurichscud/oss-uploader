@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "阿里云 OSS 可视化上传工具，键名规则与 commune-mp 保持一致",
+  "packageManager": "pnpm@10.29.2",
   "scripts": {
     "dev": "next dev -p 3211",
     "build": "next build",
